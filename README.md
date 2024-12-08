@@ -4,7 +4,7 @@ advanced computational techniques.
 You should pick two subjects among the three subjects below:
 - Project #1: HF and MP2 energy in C
 - Project #2: Sparse matrices in Fortran
-- Project #3: Molecular dybamics in C or Fortran
+- Project #3: Molecular dynamics in C or Fortran
 
 You must fork this repository and create your files in the `project*`
 directory. Don't forget to `git add` your files, and make some frequent commits
