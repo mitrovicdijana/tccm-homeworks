@@ -2,6 +2,7 @@
 #include <stdio.h> // contains definition of useful fonctions (fprintf, fscanf, fopen ...)
 #include <stdlib.h>// required for malloc
 #include <math.h> // for math functions
+#include <string.h>
 
 
 double** malloc_2d(size_t m, size_t n);
@@ -105,6 +106,19 @@ void compute_acc(size_t Natoms,
                  double** distance,
                  double** acceleration);
 
+void Verlet_algorithm(double time_step,
+                 size_t Natoms,
+                 double** coord,
+                 double* mass,
+                 double** distance,
+                 double** velocity,
+                 double** acceleration);
+
+void compute_trajectory(double time_step,
+                        size_t max_steps,
+                        FILE* input_file,
+                        FILE* output_file);
+
 
 // +--------------------------------------------------------------------
 // |  Functions implementation
@@ -162,8 +176,8 @@ void compute_distances(size_t Natoms,
         for (size_t j = 0; j < Natoms; j++)
         {
             double dx = coord[i][0] - coord[j][0];
-                    double dy = coord[i][1] - coord[j][1];
-                    double dz = coord[i][2] - coord[j][2];
+            double dy = coord[i][1] - coord[j][1];
+            double dz = coord[i][2] - coord[j][2];
             distance[i][j] = sqrt(dx * dx + dy * dy + dz * dz); 
 
         }
@@ -235,10 +249,10 @@ double T(size_t Natoms,
     // velocity norm is sqrt(vix² + viy² + viz²)
     // velocity norm squared is vix² + viy² + viz²
         double velocity_squared_i = velocity[i][0] * velocity[i][0] + velocity[i][1] * velocity[i][1] + velocity[i][2] * velocity[i][2];
-    K += mass[i]*velocity_squared_i;
+        K += mass[i]*velocity_squared_i;
     }
 
-    return (1/2)*K;
+    return (1.0/2.0)*K;
 }
 
 // Next, we will write a function to compute the total energy of the system,
@@ -284,8 +298,134 @@ void compute_acc(size_t Natoms,
                         sum += U(EPSILON, SIGMA, distance[i][j]) * (coord[i][k] - coord[j][k]) / distance[i][j];
                     }
 				}
-				acceleration[i][k] = -(1/mass[i]) * sum;
+				acceleration[i][k] = -(1.0/mass[i]) * sum;
 			}
+}
+
+void Verlet_algorithm(double time_step, size_t Natoms, double** coord, double* mass, double** distance, double** velocity, double** acceleration)
+{
+    size_t iter_atom = 0;
+    size_t iter_coordinate = 0;
+
+    // 1. Update position vector for each atom
+    for (iter_atom=0; iter_atom<Natoms; ++iter_atom)
+    {
+        for (iter_coordinate=0; iter_coordinate<3; ++iter_coordinate)
+        {
+            coord[iter_atom][iter_coordinate] = coord[iter_atom][iter_coordinate] + velocity[iter_atom][iter_coordinate]*time_step
+                                                + acceleration[iter_atom][iter_coordinate]*(time_step*time_step)/2.0;
+        }
+    }
+
+    // 2. Update the part of the velocity depending on previous acceleration
+    for (iter_atom=0; iter_atom<Natoms; ++iter_atom)
+    {
+        for (iter_coordinate=0; iter_coordinate<3; ++iter_coordinate)
+        {
+            velocity[iter_atom][iter_coordinate] = velocity[iter_atom][iter_coordinate] + acceleration[iter_atom][iter_coordinate]*time_step/2.0;
+        }
+    }
+
+    // 3. Update acceleration
+    // 3.1 Start by computing new distances
+    compute_distances(Natoms, coord, distance);
+
+    // 3.2 Compute acclerations
+    compute_acc(Natoms, coord, mass, distance, acceleration);
+
+    // 4. Update the part of the velocity depending on new acceleration
+    for (iter_atom=0; iter_atom<Natoms; ++iter_atom)
+    {
+        for (iter_coordinate=0; iter_coordinate<3; ++iter_coordinate)
+        {
+            velocity[iter_atom][iter_coordinate] = velocity[iter_atom][iter_coordinate] + acceleration[iter_atom][iter_coordinate]*time_step/2.0;
+        }
+    }
+}
+
+void compute_trajectory(double time_step, size_t max_steps, FILE* input_file, FILE* output_file)
+{
+    size_t step = 0;
+    size_t iter_atom = 0;
+
+    // 1. Describing the Atoms
+    size_t Natoms = read_Natoms(input_file);
+
+    // Allocation
+    double** coord = malloc_2d(Natoms, 3);
+    double*  mass  = malloc(Natoms * sizeof(double));
+    double** distance = malloc_2d(Natoms, Natoms);
+    double** velocity = malloc_2d(Natoms, 3);
+    double** acceleration = malloc_2d(Natoms, 3);
+        
+    // Read input file
+    read_molecule(input_file, Natoms, coord, mass);
+
+    // Fill distance
+    compute_distances(Natoms, coord, distance);
+
+    // 2. The Lennard-Jones potential
+    double Vr = V(EPSILON, SIGMA, Natoms, distance);
+
+    // 3. Computing the total energy
+    // Init all velocities to zero
+    init_to_zero_velocity(Natoms, velocity);
+
+    // Compute kinetic energy
+    double Tr = T(Natoms, velocity, mass);
+
+    double Total_Energy = E(EPSILON, SIGMA, Natoms, distance, velocity, mass);
+    
+    // 4. Computing the acceleration
+    compute_acc(Natoms, coord, mass, distance, acceleration);
+
+    // Print initial state
+    if (output_file != NULL)
+    {
+        fprintf(output_file, "%zu\n", Natoms);
+        fprintf(output_file, "# T:%lf V:%lf E:%lf \n", Tr, Vr, Total_Energy);
+        for (iter_atom=0; iter_atom < Natoms; ++iter_atom)
+        {
+           fprintf(output_file, "Ar x:%lf y:%lf z:%lf \n", coord[iter_atom][0], coord[iter_atom][1], coord[iter_atom][2]); 
+        //    fprintf(output_file, "Ar vx:%lf vy:%lf vz:%lf \n", velocity[iter_atom][0], velocity[iter_atom][1], velocity[iter_atom][2]); 
+        //    fprintf(output_file, "Ar ax:%lf ay:%lf az:%lf \n", acceleration[iter_atom][0], acceleration[iter_atom][1], acceleration[iter_atom][2]); 
+        }
+    }
+
+    // Compute each step
+    for (step=0; step<max_steps; ++step)
+    {
+        // Propagate coordinates and velocities
+        Verlet_algorithm(time_step, Natoms, coord, mass, distance, velocity, acceleration);
+
+        // Print new state
+        if (output_file != NULL)
+        {
+            // Compute Energies
+            Vr = V(EPSILON, SIGMA, Natoms, distance);
+            Tr = T(Natoms, velocity, mass);
+            Total_Energy = E(EPSILON, SIGMA, Natoms, distance, velocity, mass);
+
+            // Print trajectory
+            fprintf(output_file, "%zu\n", Natoms);
+            fprintf(output_file, "# T:%lf V:%lf E:%lf \n", Tr, Vr, Total_Energy);
+            for (iter_atom=0; iter_atom < Natoms; ++iter_atom)
+            {
+                fprintf(output_file, "Ar x:%lf y:%lf z:%lf \n", coord[iter_atom][0], coord[iter_atom][1], coord[iter_atom][2]); 
+                // fprintf(output_file, "Ar vx:%lf vy:%lf vz:%lf \n", velocity[iter_atom][0], velocity[iter_atom][1], velocity[iter_atom][2]); 
+                // fprintf(output_file, "Ar ax:%lf ay:%lf az:%lf \n", acceleration[iter_atom][0], acceleration[iter_atom][1], acceleration[iter_atom][2]); 
+            }
+        }
+
+    }
+    
+    // Free memory
+    free_2d(acceleration);
+    free_2d(velocity);
+    free_2d(distance);
+    free(mass);
+    free_2d(coord);
+
 }
 
 
@@ -295,83 +435,29 @@ void compute_acc(size_t Natoms,
 
 
 // Try the functions
-int main()
+int main(int argc, char *argv[])
 {
-    const char * fichier_molecules = "./inp.txt";
+    const char * fichier_molecules = argv[1];
+    double time_step = atof(argv[2]);
+    size_t max_steps = atol(argv[3]);
+
+    const char * trajectory_file = "./trajectory.txt";
     
     // Open file
     FILE * input_file = fopen(fichier_molecules, "r");
+    FILE * output_file = fopen(trajectory_file, "w");
     
-    if (input_file == NULL)
+    if ((input_file == NULL) || (output_file == NULL))
     {
         return -1;
     }
     else
     {
-        // 1. Describing the Atoms
-        size_t Natoms = read_Natoms(input_file);
-
-        fprintf(stdout, "Natoms = %zu\n", Natoms);
-
-        // Allocation
-        double** coord = malloc_2d(Natoms, 3);
-        double*  mass  = malloc(Natoms * sizeof(double));
-        double** distance = malloc_2d(Natoms, Natoms);
-        double** velocity = malloc_2d(Natoms, 3);
-        double** acceleration = malloc_2d(Natoms, 3);
-            
-        // Read input file
-        read_molecule(input_file, Natoms, coord, mass);
-
-        // Display coordinates and mass
-        for (size_t i = 0; i < Natoms; i++)
-        {
-            fprintf(stdout, "atom[%zu] = coord(%lf %lf %lf) mass=%lf\n", i, coord[i][0], coord[i][1], coord[i][2], mass[i]);
-        }    
-        fprintf(stdout, "\n");
-
-        // Fill distance
-        compute_distances(Natoms, coord, distance);
-        
-        // Display distance
-        for (size_t i = 0; i < Natoms; i++)
-          for (size_t j = 0; j < Natoms; j++)
-          {
-              fprintf(stdout, "distance[%zu][%zu]=%lf\n", i, j, distance[i][j]);
-          }    
-        fprintf(stdout, "\n");
-
-        // 2. The Lennard-Jones potential
-        double Vr = V(EPSILON, SIGMA, Natoms, distance);
-        fprintf(stdout, "Vr=%lf\n", Vr);
-
-        // 3. Computing the total energy
-        // Init all velocities to zero
-        init_to_zero_velocity(Natoms, velocity);
-        fprintf(stdout, "T=%lf\n", T(Natoms, velocity, mass));
-
-        double Total_Energy = E(EPSILON, SIGMA, Natoms, distance, velocity, mass);
-        fprintf(stdout, "E=%lf\n", Total_Energy);
-
-        // 4. Computing the acceleration
-        compute_acc(Natoms, coord, mass, distance, acceleration);
-        // Display acceleration
-        for (size_t i = 0; i < Natoms; i++)
-          for (size_t k = 0; k < 3; k++)
-          {
-              fprintf(stdout, "acceleration[%zu][%zu]=%lf\n", i, k, acceleration[i][k]);
-          }    
-        fprintf(stdout, "\n");
-        
-        // Free memory
-        free_2d(acceleration);
-        free_2d(velocity);
-        free_2d(distance);
-        free(mass);
-        free_2d(coord);
+        compute_trajectory(time_step, max_steps, input_file, output_file);
 
         // Close file
         fclose(input_file);
+        fclose(output_file);
     }        
     
     
