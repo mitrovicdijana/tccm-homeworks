@@ -10,3 +10,7 @@ The main source is `dynalics.c`. It contains the main function and private funct
 # Output
 
 The output of the algorithm is a file `trajectory.txt` stored in the same directory as the `compile_and_run.sh` file.
+
+# Testing
+
+In order to test the code, a `test.sh` file is provided, which runs the code with a given output and verifies that it did not return an error.
