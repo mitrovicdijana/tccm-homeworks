@@ -386,7 +386,7 @@ void compute_trajectory(double time_step, size_t max_steps, FILE* input_file, FI
         fprintf(output_file, "# T:%lf V:%lf E:%lf \n", Tr, Vr, Total_Energy);
         for (iter_atom=0; iter_atom < Natoms; ++iter_atom)
         {
-           fprintf(output_file, "Ar x:%lf y:%lf z:%lf \n", coord[iter_atom][0], coord[iter_atom][1], coord[iter_atom][2]); 
+           fprintf(output_file, "Ar %lf %lf %lf \n", coord[iter_atom][0], coord[iter_atom][1], coord[iter_atom][2]); 
         //    fprintf(output_file, "Ar vx:%lf vy:%lf vz:%lf \n", velocity[iter_atom][0], velocity[iter_atom][1], velocity[iter_atom][2]); 
         //    fprintf(output_file, "Ar ax:%lf ay:%lf az:%lf \n", acceleration[iter_atom][0], acceleration[iter_atom][1], acceleration[iter_atom][2]); 
         }
@@ -411,7 +411,7 @@ void compute_trajectory(double time_step, size_t max_steps, FILE* input_file, FI
             fprintf(output_file, "# T:%lf V:%lf E:%lf \n", Tr, Vr, Total_Energy);
             for (iter_atom=0; iter_atom < Natoms; ++iter_atom)
             {
-                fprintf(output_file, "Ar x:%lf y:%lf z:%lf \n", coord[iter_atom][0], coord[iter_atom][1], coord[iter_atom][2]); 
+                fprintf(output_file, "Ar %lf %lf %lf \n", coord[iter_atom][0], coord[iter_atom][1], coord[iter_atom][2]); 
                 // fprintf(output_file, "Ar vx:%lf vy:%lf vz:%lf \n", velocity[iter_atom][0], velocity[iter_atom][1], velocity[iter_atom][2]); 
                 // fprintf(output_file, "Ar ax:%lf ay:%lf az:%lf \n", acceleration[iter_atom][0], acceleration[iter_atom][1], acceleration[iter_atom][2]); 
             }
